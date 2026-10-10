@@ -1,0 +1,83 @@
+{
+  "name": "mob-hub",
+  "version": "1.0.0",
+  "description": "Multi-device scrcpy launcher + grid viewer",
+  "license": "MIT",
+  "author": "Yen Dang",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "predist:mac": "node scripts/fetch-server.mjs",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "fetch-server": "node scripts/fetch-server.mjs",
+    "icon": "python3 scripts/make-icon.py",
+    "postinstall": "node node_modules/electron/install.js && (node scripts/fetch-server.mjs || echo \"(skip) scrcpy-server will be downloaded on first use\")"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@yume-chan/adb": "3.0.0-beta.3",
+    "@yume-chan/adb-scrcpy": "3.0.0-beta.3",
+    "@yume-chan/adb-server-node-tcp": "3.0.0-beta.3",
+    "@yume-chan/scrcpy": "3.0.0-beta.3",
+    "@yume-chan/scrcpy-decoder-webcodecs": "3.0.0-beta.3",
+    "@yume-chan/stream-extra": "3.0.0-beta.3",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7"
+  },
+  "productName": "Mob Hub",
+  "build": {
+    "appId": "com.mobhub.app",
+    "productName": "Mob Hub",
+    "files": [
+      "out/**/*"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "extraResources": [
+      {
+        "from": "resources/",
+        "to": ".",
+        "filter": [
+          "scrcpy-server-v*",
+          "!*.tmp"
+        ]
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "third_party/",
+        "to": "third_party"
+      }
+    ]
+  }
+}

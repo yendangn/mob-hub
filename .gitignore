@@ -1,0 +1,7 @@
+node_modules
+out
+dist
+resources/scrcpy-server-*
+.DS_Store
+.idea/
+landing/
