@@ -1,5 +1,7 @@
 # Mob Hub
 
+**Website:** https://mobhub.phindev.dev/
+
 > This is an unofficial project. It is not affiliated with or endorsed by Genymobile or the scrcpy project.
 
 An Electron wrapper for [scrcpy](https://github.com/Genymobile/scrcpy) on macOS:
@@ -7,8 +9,9 @@ An Electron wrapper for [scrcpy](https://github.com/Genymobile/scrcpy) on macOS:
 - **Device list**: shows the connected devices (USB and Wi-Fi). The list updates every 1.5 seconds.
 - **Click a device** to open a native scrcpy window. The app arranges the windows in a grid to the right of the app.
 - **In-app grid**: click `+` next to a device to see and control a phone screen in the app window. You can show many devices at the same time.
-- **Sync control**: when you use one device, all devices in the grid do the same action (tap, swipe, key input, Home/Back).
-- **Screenshot**: click the camera button on a grid tile to save a full-resolution PNG from the device (through `adb screencap`). The app saves it to the Desktop, or to the folder set in Settings, and copies it to the clipboard. With Sync control on, the app takes a screenshot of each device in the grid. Screens that an app protects (for example, banking apps or DRM video) come out black.
+- **Sync control**: when you use one device, all devices in the grid repeat the same action: tap, swipe, key input, or Home or Back.
+- **Screenshot**: click the camera button on a grid tile to save a full-resolution PNG from the device, through `adb screencap`. The app saves the file to the Desktop, or to the folder set in Settings, and copies it to the clipboard. With Sync control on, the app takes a screenshot of every device in the grid. A protected screen, for example a banking app or DRM video, appears black.
+- **Copy text**: press `Cmd+Shift+T` on a grid tile. Then drag a box over text or a QR code or barcode, or click to read the whole screen. The app reads the selected area with Apple Vision. For a QR code or barcode, it copies the decoded payload to the clipboard. For plain text, it copies the recognized text. The app does not yet support QR codes with a binary payload.
 
 ![Mob Hub grid view with two connected devices](docs/screenshot.png)
 
@@ -16,6 +19,7 @@ An Electron wrapper for [scrcpy](https://github.com/Genymobile/scrcpy) on macOS:
 
 ```bash
 brew install scrcpy android-platform-tools   # scrcpy + adb
+xcode-select --install                       # Xcode Command Line Tools, to build the Copy text OCR helper
 ```
 
 Node.js 20.19 or later (or 22.12 or later).
@@ -23,7 +27,7 @@ Node.js 20.19 or later (or 22.12 or later).
 ## Run
 
 ```bash
-npm install        # postinstall downloads scrcpy-server v5.0.1 into resources/
+npm install        # postinstall downloads scrcpy-server v5.0.1 and builds the Copy text OCR helper into resources/
 npm run dev        # dev mode with hot reload
 npm run dist:mac   # build .dmg files (arm64 and x64) into dist/
 ```
@@ -76,29 +80,34 @@ The `@yume-chan` packages are at `3.0.0-beta.3`. Only this beta version supports
 |---|---|
 | [scrcpy](https://github.com/Genymobile/scrcpy) | Mode A: native scrcpy windows. |
 | [adb](https://developer.android.com/tools/adb) (Android platform-tools) | Device list and the adb server. |
+| [Apple Vision](https://developer.apple.com/documentation/vision) (macOS system framework) | Copy text: OCR and QR code or barcode decoding in `native/ocr/main.swift`. |
 
 ## Structure
 
 ```
 src/main/      index.ts (window + IPC), adb.ts (device list), external.ts (mode A), grid.ts (mode B),
-               screenshot.ts, settings.ts, tools.ts (find adb/scrcpy)
+               screenshot.ts, ocr.ts (Copy text: screenshot → OCR helper → clipboard), settings.ts,
+               tools.ts (find adb/scrcpy)
 src/preload/   IPC bridge → window.api
 src/renderer/  React UI: App.tsx, GridTile.tsx (decoder + input), gridBus.ts (video packet routing),
                SettingsDialog.tsx, icons.tsx
 src/shared/    shared data types, scrcpy-server.json (server version + SHA-256)
-scripts/       fetch-server.mjs (download scrcpy-server), make-icon.py (app icon)
+native/        ocr/main.swift (Copy text helper: Apple Vision OCR + barcode decode, reads a PNG on stdin)
+scripts/       fetch-server.mjs (download scrcpy-server), build-ocr.mjs (build the OCR helper),
+               make-icon.py (app icon)
 build/         app icon for electron-builder
 third_party/   licenses of bundled third-party software
 ```
 
 ## Notes
 
-- **The server version must match the library.** The server version and its SHA-256 are in `src/shared/scrcpy-server.json`. The app and `scripts/fetch-server.mjs` read them from this file and reject a file with a different hash. The server protocol must be one that `@yume-chan/scrcpy` supports (`ScrcpyOptionsLatest`, 4.1 in `3.0.0-beta.3`). Server 5.0.1 uses the same protocol as 4.1. When you change the server version, update the two values in the JSON file.
-- **macOS does not let an app embed the window of a different process.** Thus, Mode A only arranges the windows next to each other.
-- **One device can run in the two modes at the same time.** This uses two times the bandwidth.
-- **Text input in the grid:** the grid gets text from a hidden text field, so macOS input methods (for example, Vietnamese Telex or VNI) work. The app sends ASCII text with `injectText`. scrcpy-server cannot type other characters (for example, Vietnamese diacritics or emoji) as key events, so the app sends them through the device clipboard and a paste action. When the pastes stop, the app puts back the text that you last copied on the device. It can do this only if you copied that text while the device was in the grid. On Android 6 and earlier, the paste action is not available, so these characters are not typed.
-- **Keyboard shortcuts in the grid:** the app does not send Cmd to the device, because Android opens the Assistant when Meta is pressed alone. Cmd+A, Cmd+C, Cmd+X, Cmd+Z and Cmd+Y go to the device as Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+Z and Ctrl+Y. Cmd+V pastes the Mac clipboard text into the device. Other Cmd shortcuts (for example, Cmd+Q, Cmd+W, Cmd+Tab) stay on the Mac.
-- **Press and hold:** the app turns off the macOS accent popup that appears when you hold a key, so that a held key repeats on the device.
+- **The server version must match the library.** The server version and its SHA-256 are in `src/shared/scrcpy-server.json`. The app and `scripts/fetch-server.mjs` read the version and the hash from this file. They reject a file with a different hash. The server protocol must be one that `@yume-chan/scrcpy` supports: `ScrcpyOptionsLatest`, protocol 4.1 in `3.0.0-beta.3`. Server 5.0.1 uses the same protocol as 4.1. When you change the server version, update the two values in the JSON file.
+- **macOS does not let an app embed the window of another process.** As a result, Mode A arranges the scrcpy windows next to the app.
+- **A device can run in both modes at the same time.** This doubles the bandwidth use.
+- **Text input in the grid:** the grid reads text from a hidden text field. As a result, macOS input methods work, for example Vietnamese Telex or VNI. The app sends ASCII text with `injectText`. scrcpy-server cannot type other characters as key events, for example Vietnamese diacritics or emoji. So the app sends these characters through the device clipboard and a paste action. When the pastes stop, the app restores the text that you last copied on the device. The app can restore this text only if you copied it while the device was in the grid. On Android 6 and earlier, the paste action does not exist. So the app cannot type these characters.
+- **Keyboard shortcuts in the grid:** the app does not send Cmd to the device. If you press Meta alone, Android opens the Assistant. The app sends Cmd+A, Cmd+C, Cmd+X, Cmd+Z, and Cmd+Y to the device as Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+Z, and Ctrl+Y. Cmd+V pastes the Mac clipboard text into the device. Other Cmd shortcuts, for example Cmd+Q, Cmd+W, and Cmd+Tab, stay on the Mac.
+- **Press and hold:** the app disables the macOS accent popup that appears when you hold a key. As a result, a held key repeats on the device.
+- **Copy text** needs the Xcode Command Line Tools at install time, to build the OCR helper. The install step runs `npm run build-ocr`. If these tools are missing, it skips the step silently. Apple Vision exposes only the string payload of a QR code or barcode. So the app cannot read a code that encodes binary data.
 
 ## License
 
