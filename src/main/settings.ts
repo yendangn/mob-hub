@@ -57,7 +57,8 @@ function sanitizeSettings(input: unknown, strict = true): Settings {
     bitrateMbps: num(s.bitrateMbps, d.bitrateMbps, 0.1, 200, false),
     maxFps: num(s.maxFps, d.maxFps, 0, 240, true),
     extraArgs: typeof s.extraArgs === 'string' ? s.extraArgs.slice(0, 2000) : d.extraArgs,
-    screenshotDir: dirPath(s.screenshotDir, strict)
+    screenshotDir: dirPath(s.screenshotDir, strict),
+    syncClipboardToMac: typeof s.syncClipboardToMac === 'boolean' ? s.syncClipboardToMac : d.syncClipboardToMac
   }
 }
 

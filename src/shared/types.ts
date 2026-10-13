@@ -25,6 +25,8 @@ export interface Settings {
   extraArgs: string
   /** Folder for screenshots. Empty = Desktop. */
   screenshotDir: string
+  /** Copy text that the user copies on a device in the grid to the Mac clipboard. */
+  syncClipboardToMac: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,7 +37,8 @@ export const DEFAULT_SETTINGS: Settings = {
   bitrateMbps: 4,
   maxFps: 30,
   extraArgs: '',
-  screenshotDir: ''
+  screenshotDir: '',
+  syncClipboardToMac: true
 }
 
 export interface ToolStatus {
@@ -87,6 +90,24 @@ export interface KeyInput {
   meta: number
 }
 
+/** Part of the screen, as fractions (0...1) of the screen size, origin at top left. */
+export interface OcrRegion {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface OcrResult {
+  /** 'code' = the content of QR codes or barcodes in the region, 'text' = the text on the screen. */
+  kind: 'text' | 'code'
+  /** Type of the first code, for example "QR" or "EAN13". Only for kind 'code'. */
+  codeType?: string
+  text: string
+  /** Number of text lines, or number of codes. */
+  lines: number
+}
+
 export interface Api {
   getSettings(): Promise<Settings>
   saveSettings(s: Settings): Promise<ToolStatus>
@@ -114,6 +135,8 @@ export interface Api {
   screenshot(serial: string, label: string, copyToClipboard: boolean): Promise<{ path: string }>
   /** Show a screenshot that this app saved in Finder. */
   revealFile(path: string): Promise<void>
+  /** Read the text on the screen (or the QR codes and barcodes in a region of it) and copy it to the Mac clipboard. */
+  copyScreenText(serial: string, region?: OcrRegion): Promise<OcrResult>
 
   onError(cb: (msg: string) => void): () => void
 }

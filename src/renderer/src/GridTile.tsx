@@ -6,7 +6,7 @@ import {
   WebCodecsVideoDecoder,
   WebGLVideoFrameRenderer
 } from '@yume-chan/scrcpy-decoder-webcodecs'
-import type { GridSessionInfo, NavButton, VideoPacket } from '@shared/types'
+import type { GridSessionInfo, NavButton, OcrRegion, VideoPacket } from '@shared/types'
 import { register } from './gridBus'
 import { Icon } from './icons'
 
@@ -19,7 +19,12 @@ interface Props {
   onClose(): void
   /** Take screenshots of these devices. */
   onScreenshot(serials: string[]): Promise<void>
+  /** Read the text on this device's screen (or in a region of it) and copy it to the Mac clipboard. */
+  onCopyText(serial: string, region?: OcrRegion): Promise<void>
 }
+
+/** A drag shorter than this (CSS px) is a click: read the whole screen. */
+const MIN_DRAG = 6
 
 // AndroidKeyEventMeta bits
 const META = { shift: 1, alt: 2, ctrl: 4096, meta: 65536 }
@@ -28,7 +33,7 @@ const IS_MAC = navigator.userAgent.includes('Mac')
 const NAV_LEFT: [NavButton, string][] = [['back', 'Back'], ['home', 'Home'], ['recents', 'Recents']]
 const NAV_RIGHT: [NavButton, string][] = [['volDown', 'Volume down'], ['volUp', 'Volume up'], ['rotate', 'Rotate screen']]
 
-export function GridTile({ info, title, targets, synced, onClose, onScreenshot }: Props) {
+export function GridTile({ info, title, targets, synced, onClose, onScreenshot, onCopyText }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const sizeRef = useRef({ w: info.width, h: info.height })
@@ -40,6 +45,32 @@ export function GridTile({ info, title, targets, synced, onClose, onScreenshot }
   const held = useRef(new Map<string, string[]>())
   /** Text that the IME is composing (for example, Telex), shown over the screen until it is committed. */
   const [composing, setComposing] = useState('')
+  /** "Copy text" mode: the user drags a box over the screen. Touches do not go to the device. */
+  const [selecting, setSelecting] = useState(false)
+  /** The box being dragged, in client coordinates. */
+  const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number }>()
+  const [reading, setReading] = useState(false)
+  const screenRef = useRef<HTMLDivElement>(null)
+  /** "More" menu (volume, rotate): open/closed. */
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
+
+  // Close the "more" menu on an outside click or Esc.
+  useEffect(() => {
+    if (!moreOpen) return
+    const onDown = (e: PointerEvent) => {
+      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoreOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [moreOpen])
 
   // decoder lifecycle
   useEffect(() => {
@@ -194,10 +225,16 @@ export function GridTile({ info, title, targets, synced, onClose, onScreenshot }
    * Cmd is never sent to the device: Android reads a lone Meta tap as "open Assistant".
    * Like scrcpy desktop, the text-editing shortcuts go to the device as Ctrl (Android uses Ctrl for them).
    * Shortcuts match the typed character, not the physical key, so they work on AZERTY and Dvorak.
+   * Cmd+Shift+T is for this app: start or stop "Copy text".
    */
   const CMD_TO_CTRL = new Set(['a', 'c', 'x', 'z', 'y'])
   const onCmdKey = (e: React.KeyboardEvent) => {
     const ch = e.key.toLowerCase()
+    if (ch === 't' && e.shiftKey) {
+      e.preventDefault()
+      if (!reading) toggleSelecting()
+      return
+    }
     if (ch === 'v') return // the browser pastes into the textarea, then onPaste sends it
     if (!CMD_TO_CTRL.has(ch)) return // leave it to the Mac
     e.preventDefault()
@@ -259,6 +296,63 @@ export function GridTile({ info, title, targets, synced, onClose, onScreenshot }
       setCapturing(false)
     }
   }
+
+  const stopSelecting = () => {
+    setSelecting(false)
+    setDrag(undefined)
+  }
+  const toggleSelecting = () => (selecting ? stopSelecting() : setSelecting(true))
+  // While selecting, Esc and Enter are for this mode only: they must not go to the device.
+  useEffect(() => {
+    if (!selecting) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' && e.key !== 'Enter') return
+      e.preventDefault()
+      e.stopPropagation()
+      stopSelecting()
+      if (e.key === 'Enter') void readText()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [selecting])
+
+  const readText = async (region?: OcrRegion) => {
+    setReading(true)
+    try {
+      await onCopyText(info.serial, region)
+    } finally {
+      setReading(false)
+    }
+  }
+  const onSelectDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDrag({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY })
+  }
+  const onSelectMove = (e: React.PointerEvent) => {
+    if (drag) setDrag({ ...drag, x1: e.clientX, y1: e.clientY })
+  }
+  const onSelectUp = (e: React.PointerEvent) => {
+    if (!drag) return
+    stopSelecting()
+    if (Math.abs(e.clientX - drag.x0) < MIN_DRAG && Math.abs(e.clientY - drag.y0) < MIN_DRAG) return void readText()
+    const a = toDevice({ clientX: drag.x0, clientY: drag.y0 })
+    const b = toDevice(e)
+    if (!a || !b) return
+    const region = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) }
+    // the box is outside the video (in the black bars)
+    if (region.w > 0 && region.h > 0) void readText(region)
+  }
+  const dragBox = () => {
+    const r = screenRef.current?.getBoundingClientRect()
+    if (!drag || !r) return undefined
+    return {
+      left: Math.min(drag.x0, drag.x1) - r.left,
+      top: Math.min(drag.y0, drag.y1) - r.top,
+      width: Math.abs(drag.x1 - drag.x0),
+      height: Math.abs(drag.y1 - drag.y0)
+    }
+  }
   const landscape = size.w > size.h
 
   return (
@@ -297,7 +391,7 @@ export function GridTile({ info, title, targets, synced, onClose, onScreenshot }
         </span>
         <button className="tile-btn" title="Close" aria-label="Close" onClick={onClose}><Icon name="close" /></button>
       </div>
-      <div className="tile-screen">
+      <div className="tile-screen" ref={screenRef}>
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
@@ -307,6 +401,21 @@ export function GridTile({ info, title, targets, synced, onClose, onScreenshot }
           onContextMenu={onContextMenu}
           onWheel={onWheel}
         />
+        {selecting && (
+          <div
+            className="tile-select"
+            onPointerDown={onSelectDown}
+            onPointerMove={onSelectMove}
+            onPointerUp={onSelectUp}
+            onPointerCancel={stopSelecting}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              stopSelecting()
+            }}
+          >
+            {drag ? <div className="tile-select-box" style={dragBox()} /> : <div className="tile-select-hint">Drag over text or a QR code to copy · Click or Enter for the whole screen · Esc to cancel</div>}
+          </div>
+        )}
       </div>
       <div className="tile-nav" onMouseDown={keepFocus}>
         {NAV_LEFT.map(([b, label]) => (
@@ -322,9 +431,44 @@ export function GridTile({ info, title, targets, synced, onClose, onScreenshot }
         >
           <Icon name="camera" />
         </button>
-        {NAV_RIGHT.map(([b, label]) => (
-          <button key={b} className="tile-btn" title={label} aria-label={label} onClick={() => nav(b)}><Icon name={b} /></button>
-        ))}
+        <button
+          className={`tile-btn${selecting ? ' on' : ''}`}
+          title="Copy text or a QR code from the screen (⌘⇧T)"
+          aria-label="Copy text from the screen"
+          aria-pressed={selecting}
+          disabled={reading}
+          onClick={toggleSelecting}
+        >
+          <Icon name="text" />
+        </button>
+        <div className="tile-more" ref={moreRef}>
+          <button
+            className={`tile-btn${moreOpen ? ' on' : ''}`}
+            title="More"
+            aria-label="More"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            <Icon name="more" />
+          </button>
+          {moreOpen && (
+            <div className="tile-menu">
+              {NAV_RIGHT.map(([b, label]) => (
+                <button
+                  key={b}
+                  className="tile-menu-item"
+                  onClick={() => {
+                    nav(b)
+                    setMoreOpen(false)
+                  }}
+                >
+                  <Icon name={b} />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

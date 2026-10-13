@@ -29,12 +29,25 @@ const PATHS = {
       <circle cx="12" cy="13" r="3.5" />
     </>
   ),
+  text: (
+    <>
+      <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
+      <path d="M8.5 8.5h7M12 8.5v7" />
+    </>
+  ),
   refresh: (
     <>
       <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8" />
       <path d="M4 4v4h4" />
       <path d="M4 13a8 8 0 0 0 14.3 4.9L20 16" />
       <path d="M20 20v-4h-4" />
+    </>
+  ),
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
     </>
   ),
   settings: (

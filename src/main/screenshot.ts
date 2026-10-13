@@ -24,18 +24,37 @@ function timestamp(d = new Date()): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`
 }
 
+/** Index of the first PNG signature in the data, or -1 if there is none. */
+function findPngStart(data: Uint8Array): number {
+  const last = data.length - PNG_SIGNATURE.length
+  for (let i = 0; i <= last; i++) {
+    if (PNG_SIGNATURE.every((b, j) => data[i + j] === b)) return i
+  }
+  return -1
+}
+
 /**
- * Take a full-resolution, lossless screenshot on the device (`screencap -p` through adb exec,
- * which keeps binary data unchanged), save it as PNG and copy it to the Mac clipboard.
+ * Full-resolution PNG of the device screen (`screencap -p` through adb exec, which keeps binary data unchanged).
  * Screens with a secure flag (banking apps, DRM video) come back black: Android does not allow capturing them.
  */
-export async function takeScreenshot(serial: string, label: string, copyToClipboard: boolean): Promise<string> {
+export async function captureScreen(serial: string): Promise<Uint8Array> {
   const adb = await createAdb(serial)
-  const png = await adb.subprocess.noneProtocol.spawn(['screencap', '-p']).wait()
-  if (png.length < PNG_SIGNATURE.length || PNG_SIGNATURE.some((b, i) => png[i] !== b)) {
-    const text = new TextDecoder().decode(png.subarray(0, 200)).trim()
+  const output = await adb.subprocess.noneProtocol.spawn(['screencap', '-p']).wait()
+  // The none protocol merges stderr into stdout. Devices with more than one display
+  // (Samsung foldables, DeX) write a warning before the PNG data, so skip to the signature.
+  const start = findPngStart(output)
+  if (start < 0) {
+    const text = new TextDecoder().decode(output.subarray(0, 200)).trim()
     throw new Error(`Screenshot failed${text ? `: ${text}` : ''}`)
   }
+  return start === 0 ? output : output.subarray(start)
+}
+
+/**
+ * Take a full-resolution, lossless screenshot on the device, save it as PNG and copy it to the Mac clipboard.
+ */
+export async function takeScreenshot(serial: string, label: string, copyToClipboard: boolean): Promise<string> {
+  const png = await captureScreen(serial)
 
   const dir = screenshotDir()
   mkdirSync(dir, { recursive: true })

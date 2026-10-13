@@ -32,6 +32,7 @@ const api: Api = {
 
   screenshot: (serial, label, copyToClipboard) => ipcRenderer.invoke('screenshot:take', serial, label, copyToClipboard),
   revealFile: (path) => ipcRenderer.invoke('screenshot:reveal', path),
+  copyScreenText: (serial, region) => ipcRenderer.invoke('ocr:copyText', serial, region),
 
   onError: (cb) => on('error', cb)
 }

@@ -6,6 +6,7 @@ import { ensureAdbServer, forceRefresh, isKnownDevice, stopWatching, watchDevice
 import { closeAllWindows, closeWindow, openWindow, runningSerials, setExternalListeners } from './external'
 import { gridStart, gridStop, gridStopAll, key, nav, resetVideo, scroll, setGridSink, touch } from './grid'
 import { revealScreenshot, takeScreenshot } from './screenshot'
+import { copyScreenText } from './ocr'
 import { getSettings, saveSettings } from './settings'
 import { resetToolCache, resolveTool } from './tools'
 
@@ -188,6 +189,16 @@ function registerIpc() {
   handle('screenshot:reveal', (path: unknown) => {
     if (typeof path !== 'string') throw new Error('bad path')
     revealScreenshot(path)
+  })
+  handle('ocr:copyText', (serial: unknown, region: unknown) => {
+    assertDevice(serial)
+    if (region === undefined) return copyScreenText(serial)
+    const r = region as Record<string, unknown>
+    const ok = (v: unknown) => isNum(v) && v >= 0 && v <= 1
+    if (!r || !ok(r.x) || !ok(r.y) || !ok(r.w) || !ok(r.h) || (r.w as number) <= 0 || (r.h as number) <= 0) {
+      throw new Error('bad region')
+    }
+    return copyScreenText(serial, { x: r.x as number, y: r.y as number, w: r.w as number, h: r.h as number })
   })
   listen('grid:resetVideo', (serial) => {
     if (typeof serial === 'string') resetVideo(serial)

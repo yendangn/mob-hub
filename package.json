@@ -13,11 +13,12 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "predist:mac": "node scripts/fetch-server.mjs",
+    "predist:mac": "node scripts/fetch-server.mjs && node scripts/build-ocr.mjs",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "fetch-server": "node scripts/fetch-server.mjs",
+    "build-ocr": "node scripts/build-ocr.mjs",
     "icon": "python3 scripts/make-icon.py",
-    "postinstall": "node node_modules/electron/install.js && (node scripts/fetch-server.mjs || echo \"(skip) scrcpy-server will be downloaded on first use\")"
+    "postinstall": "node node_modules/electron/install.js && (node scripts/fetch-server.mjs || echo \"(skip) scrcpy-server will be downloaded on first use\") && (node scripts/build-ocr.mjs || echo \"(skip) OCR helper not built: install the Xcode Command Line Tools\")"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
@@ -67,6 +68,7 @@
         "to": ".",
         "filter": [
           "scrcpy-server-v*",
+          "mobhub-ocr",
           "!*.tmp"
         ]
       },

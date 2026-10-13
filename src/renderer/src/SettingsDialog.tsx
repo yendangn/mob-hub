@@ -79,6 +79,11 @@ export function SettingsDialog({ settings, tools, onSave, onClose }: Props) {
           <input value={s.screenshotDir} placeholder="~/Desktop" onChange={(e) => set('screenshotDir', e.target.value)} />
         </label>
 
+        <label className="check">
+          <input type="checkbox" checked={s.syncClipboardToMac} onChange={(e) => set('syncClipboardToMac', e.target.checked)} />
+          Copy text from grid devices to the Mac clipboard
+        </label>
+
         <p className="muted small">Grid view uses the built-in scrcpy-server v{server.version} (downloaded on first use). It does not depend on the installed scrcpy.</p>
         {error && <p className="form-error">{error}</p>}
 
