@@ -1,4 +1,4 @@
-import { app, net } from 'electron'
+import { app, clipboard, net } from 'electron'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -205,8 +205,17 @@ async function doStart(serial: string, pending: PendingStart): Promise<GridSessi
       .pipeTo(new WritableStream({ write: (line) => console.log(`[scrcpy ${serial}]`, line) }))
       .catch(() => {})
 
+    // Text the user copies on the device also goes to the Mac clipboard (if the setting is on).
+    // scrcpy-server does not echo the clipboard values that the grid sets for paste.
     void client.clipboard
-      ?.pipeTo(new WritableStream({ write: (text) => void (session.deviceClipboard = text) }))
+      ?.pipeTo(
+        new WritableStream({
+          write: (text) => {
+            session.deviceClipboard = text
+            if (getSettings().syncClipboardToMac) clipboard.writeText(text)
+          }
+        })
+      )
       .catch(() => {})
 
     const video = await client.videoStream

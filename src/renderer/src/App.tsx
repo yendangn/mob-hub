@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DeviceInfo, GridSessionInfo, Settings, ToolStatus } from '@shared/types'
+import type { DeviceInfo, GridSessionInfo, OcrRegion, Settings, ToolStatus } from '@shared/types'
 import { GridTile } from './GridTile'
 import { Icon } from './icons'
 import { discard, prepare } from './gridBus'
@@ -144,6 +144,21 @@ export function App() {
     })
   }
 
+  const copyScreenText = async (serial: string, region?: OcrRegion) => {
+    const d = devices.find((x) => x.serial === serial)
+    try {
+      const r = await api.copyScreenText(serial, region)
+      const preview = r.text.replace(/\s+/g, ' ').slice(0, 60)
+      const what =
+        r.kind === 'code'
+          ? r.lines === 1 ? r.codeType ?? 'code' : `${r.lines} codes`
+          : `${r.lines} ${r.lines === 1 ? 'line' : 'lines'}`
+      pushToast({ kind: 'info', msg: `Copied ${what}: ${preview}${r.text.length > 60 ? '…' : ''}` })
+    } catch (e) {
+      pushError(`${d ? label(d) : serial}: ${cleanErr(e)}`)
+    }
+  }
+
   const saveSettings = async (s: Settings) => {
     const t = await api.saveSettings(s)
     setSettings(await api.getSettings()) // main corrects out-of-range values
@@ -267,6 +282,7 @@ export function App() {
                   targets={() => (syncRef.current ? liveSerials() : [serial])}
                   onClose={() => removeFromGrid(serial)}
                   onScreenshot={takeScreenshots}
+                  onCopyText={copyScreenText}
                 />
               )
             })}
