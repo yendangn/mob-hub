@@ -1,6 +1,6 @@
 {
   "name": "mob-hub",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Multi-device scrcpy launcher + grid viewer",
   "license": "MIT",
   "author": "Yen Dang",
